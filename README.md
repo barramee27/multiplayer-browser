@@ -52,4 +52,10 @@ If the server is not on localhost, edit `SERVER_URL` in:
 
 ## License
 
-MIT
+MIT © [barramee27](https://github.com/barramee27)
+
+## Links
+
+- **Live:** [multiplayer.codemesh.org](https://multiplayer.codemesh.org)
+- **X (Twitter):** [@Barramee_code](https://x.com/Barramee_code)
+- **GitHub:** [barramee27](https://github.com/barramee27)
