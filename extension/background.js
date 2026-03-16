@@ -105,7 +105,9 @@ function setupForwarding(sock) {
   ['user-joined', 'user-left', 'cursor-move', 'navigate', 'chat-message', 'annotation-add', 'annotation-remove', 'scroll-sync', 'voice-offer', 'voice-answer', 'voice-ice'].forEach(ev => {
     s.off(ev);
     s.on(ev, (data) => {
-      if (popupPort) popupPort.postMessage({ type: ev, data }).catch(() => {});
+      try {
+        if (popupPort) popupPort.postMessage({ type: ev, data });
+      } catch (_) {}
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach(tab => {
           if (tab.id && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
