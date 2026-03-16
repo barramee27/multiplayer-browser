@@ -52,7 +52,7 @@ function connect() {
     return null;
   }
   socket = io(SERVER_URL, {
-    transports: ['websocket', 'polling'],
+    transports: ['websocket'],
     reconnection: true,
     reconnectionAttempts: 20,
     reconnectionDelay: 1000,
@@ -146,6 +146,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     s.emit('scroll-sync', msg.data);
     return false;
   }
+  if (msg.type === 'KEY_SYNC') {
+    s.emit('key-sync', msg.data);
+    return false;
+  }
+  if (msg.type === 'DINO_JOIN') {
+    s.emit('dino-join');
+    return false;
+  }
   if (msg.type === 'VOICE_OFFER') {
     s.emit('voice-offer', msg.data);
     return false;
@@ -165,7 +173,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 function setupForwarding(sock) {
   const s = sock || socket || connect();
   if (!s) return;
-  ['user-joined', 'user-left', 'navigate', 'chat-message', 'code-inject', 'annotation-add', 'annotation-remove', 'scroll-sync', 'voice-offer', 'voice-answer', 'voice-ice'].forEach(ev => {
+  ['user-joined', 'user-left', 'navigate', 'chat-message', 'code-inject', 'annotation-add', 'annotation-remove', 'scroll-sync', 'key-sync', 'dino-state', 'voice-offer', 'voice-answer', 'voice-ice'].forEach(ev => {
     s.off(ev);
     s.on(ev, (data) => {
       if (ev === 'user-joined') {
@@ -194,10 +202,11 @@ function setupForwarding(sock) {
       } catch (_) {}
       if (ev !== 'navigate') {
         chrome.tabs.query({}, (tabs) => {
+          const isDino = ev === 'dino-state';
           tabs.forEach(tab => {
-            if (tab.id && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
-              chrome.tabs.sendMessage(tab.id, { type: ev, data }).catch(() => {});
-            }
+            if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) return;
+            if (isDino && !tab.url.includes('/dino')) return;
+            chrome.tabs.sendMessage(tab.id, { type: ev, data }).catch(() => {});
           });
         });
       }

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dino Run - Multiplayer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #f7f7f7;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    h1 { font-size: 18px; color: #535353; margin-bottom: 8px; }
+    .hint { font-size: 12px; color: #999; margin-bottom: 12px; }
+    #game {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      will-change: contents;
+      contain: strict;
+    }
+    .score { font-size: 14px; color: #535353; margin-top: 12px; }
+  </style>
+</head>
+<body data-mp-key-sync>
+  <h1>Dino Run (Multiplayer)</h1>
+  <p class="hint">Space or Up = Jump. 120fps sync, client prediction, interpolation.</p>
+  <canvas id="game" width="600" height="150"></canvas>
+  <p class="score">Score: <span id="score">0</span></p>
+  <script>
+    (function() {
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      const scoreEl = document.getElementById('score');
+
+      const GROUND_Y = 120;
+      const DINO_X = 50;
+      const DINO_H = 40;
+      const DINO_W = 30;
+      const GRAVITY = 0.6;
+      const JUMP = -12;
+
+      const groundBuf = document.createElement('canvas');
+      groundBuf.width = 600;
+      groundBuf.height = 150;
+      const gCtx = groundBuf.getContext('2d', { alpha: false });
+      gCtx.fillStyle = '#fff';
+      gCtx.fillRect(0, 0, 600, 150);
+      gCtx.fillStyle = '#535353';
+      gCtx.fillRect(0, GROUND_Y, 600, 30);
+
+      let state = { dinoY: 80, obstacles: [], score: 0, gameOver: false };
+      let prev = { dinoY: 80, obstacles: [], ts: 0 };
+      let predY = null, predVel = null;
+      const OBSTACLE_W = 20, OBSTACLE_H = 40;
+
+      window.addEventListener('dino-optimistic-jump', () => {
+        if (state.gameOver) return;
+        predY = state.dinoY;
+        predVel = JUMP;
+      });
+
+      window.addEventListener('dino-state', (e) => {
+        const d = e.detail;
+        const arr = Array.isArray(d) ? d : [d.dinoY, d.dinoVel, d.obstacles || [], d.score || 0, d.gameOver ? 1 : 0];
+        prev = { dinoY: state.dinoY, obstacles: state.obstacles.slice(), ts: prev.ts || performance.now() };
+        state.dinoY = arr[0];
+        state.obstacles = arr[2] || [];
+        state.score = arr[3] || 0;
+        state.gameOver = !!arr[4];
+        prev.ts = performance.now();
+        predY = null;
+        predVel = null;
+      });
+
+      function getDinoY(now) {
+        if (predVel !== null && predY !== null) {
+          predVel += GRAVITY;
+          predY += predVel;
+          if (predY >= GROUND_Y - DINO_H) {
+            predY = GROUND_Y - DINO_H;
+            predVel = null;
+          }
+          return predY | 0;
+        }
+        return state.dinoY | 0;
+      }
+
+      function draw(now) {
+        const drawY = getDinoY(now);
+        ctx.drawImage(groundBuf, 0, 0);
+        ctx.fillStyle = '#535353';
+        ctx.fillRect(DINO_X, drawY, DINO_W, DINO_H);
+        ctx.fillStyle = '#67b26f';
+        ctx.fillRect(DINO_X + 5, drawY + 5, DINO_W - 10, DINO_H - 10);
+        const obs = state.obstacles;
+        for (let i = 0; i < obs.length; i++) {
+          const o = obs[i];
+          ctx.fillRect(o.x | 0, o.y | 0, OBSTACLE_W, OBSTACLE_H);
+        }
+        scoreEl.textContent = state.score;
+
+        if (state.gameOver) {
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(0, 0, 600, 150);
+          ctx.fillStyle = '#fff';
+          ctx.font = '24px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText('Game Over', 300, 60);
+          ctx.font = '14px system-ui';
+          ctx.fillText('Press Space to restart', 300, 90);
+        }
+      }
+
+      function loop(now) {
+        draw(now);
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>

@@ -56,6 +56,22 @@
     window.scrollTo(data.scrollX || 0, data.scrollY || 0);
   }
 
+  function onKeySync(data) {
+    if (data.id === myId) return;
+    if (!document.body.hasAttribute('data-mp-key-sync')) return;
+    try {
+      const ev = new KeyboardEvent('keydown', {
+        key: data.key || ' ',
+        code: data.code || 'Space',
+        keyCode: data.keyCode || 32,
+        which: data.keyCode || 32,
+        bubbles: true,
+        cancelable: true
+      });
+      document.dispatchEvent(ev);
+    } catch (_) {}
+  }
+
   function onCodeInject(data) {
     const { type, content, userName } = data || {};
     if (!type || !content) return;
@@ -110,6 +126,22 @@
     }
   }
 
+  document.addEventListener('keydown', (e) => {
+    if (!roomId) return;
+    if (!e.isTrusted) return;
+    if (!document.body.hasAttribute('data-mp-key-sync')) return;
+    const syncKeys = ['Space', 'ArrowUp', 'ArrowDown', ' '];
+    if (!syncKeys.includes(e.key) && !syncKeys.includes(e.code)) return;
+    const isJump = ['Space', 'ArrowUp', ' '].includes(e.key) || e.code === 'Space' || e.code === 'ArrowUp';
+    if (isJump) {
+      window.dispatchEvent(new CustomEvent('dino-optimistic-jump'));
+    }
+    chrome.runtime.sendMessage({
+      type: 'KEY_SYNC',
+      data: { key: e.key, code: e.code, keyCode: e.keyCode }
+    }).catch(() => {});
+  }, { capture: true });
+
   window.addEventListener('scroll', () => {
     if (!roomId) return;
     if (window.mpScrollThrottle) clearTimeout(window.mpScrollThrottle);
@@ -141,7 +173,14 @@
       myId = msg.myId;
       if (roomId) {
         chrome.runtime.sendMessage({ type: 'NAVIGATE', url: window.location.href }).catch(() => {});
+        if (document.body.hasAttribute('data-mp-key-sync')) {
+          chrome.runtime.sendMessage({ type: 'DINO_JOIN' }).catch(() => {});
+        }
       }
+      return;
+    }
+    if (msg.type === 'dino-state') {
+      window.dispatchEvent(new CustomEvent('dino-state', { detail: msg.data }));
       return;
     }
     switch (msg.type) {
@@ -151,6 +190,7 @@
       case 'annotation-add': onAnnotationAdd(msg.data); break;
       case 'annotation-remove': onAnnotationRemove(msg.data); break;
       case 'scroll-sync': onScrollSync(msg.data); break;
+      case 'key-sync': onKeySync(msg.data); break;
       case 'code-inject': onCodeInject(msg.data); break;
     }
   });

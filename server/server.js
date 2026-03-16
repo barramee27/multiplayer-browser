@@ -18,13 +18,89 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: { origin: '*' },
-  pingInterval: 10000,
-  pingTimeout: 5000,
+  pingInterval: 25000,
+  pingTimeout: 20000,
   maxHttpBufferSize: 1e6,
+  perMessageDeflate: false,
 });
 
 // In-memory room state
 const rooms = new Map(); // roomId -> { users: Map<socketId, {id, name, color}>, createdAt }
+const dinoGames = new Map(); // roomId -> { dinoY, dinoVel, obstacles, score, frame, gameOver, seed, lastObstacle }
+
+const DINO = {
+  GRAVITY: 0.6,
+  JUMP: -12,
+  SPEED: 3,
+  OBSTACLE_W: 20,
+  OBSTACLE_H: 40,
+  GROUND_Y: 120,
+  DINO_H: 40,
+};
+const TICK_RATE = 120;
+
+function mulberry32(seed) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function ensureDinoGame(roomId) {
+  if (!dinoGames.has(roomId)) {
+    const seed = (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
+    dinoGames.set(roomId, {
+      dinoY: DINO.GROUND_Y - DINO.DINO_H,
+      dinoVel: 0,
+      obstacles: [],
+      score: 0,
+      frame: 0,
+      gameOver: false,
+      lastObstacle: 0,
+      random: mulberry32(seed),
+    });
+  }
+  return dinoGames.get(roomId);
+}
+
+function tickDinoGame(roomId) {
+  const g = ensureDinoGame(roomId);
+  const rnd = g.random;
+  if (g.gameOver) return;
+  g.dinoVel += DINO.GRAVITY;
+  g.dinoY += g.dinoVel;
+  if (g.dinoY >= DINO.GROUND_Y - DINO.DINO_H) {
+    g.dinoY = DINO.GROUND_Y - DINO.DINO_H;
+    g.dinoVel = 0;
+  }
+  const minGap = 80 + (rnd() * 60) | 0;
+  if (g.frame - g.lastObstacle > minGap) {
+    g.obstacles.push({
+      x: 600,
+      y: DINO.GROUND_Y - DINO.OBSTACLE_H,
+      w: DINO.OBSTACLE_W,
+      h: DINO.OBSTACLE_H,
+    });
+    g.lastObstacle = g.frame;
+  }
+  for (let i = g.obstacles.length - 1; i >= 0; i--) {
+    g.obstacles[i].x -= DINO.SPEED;
+    if (g.obstacles[i].x + DINO.OBSTACLE_W <= 0) g.obstacles.splice(i, 1);
+  }
+  g.score = Math.floor(g.frame / 5);
+  const dinoRight = 50 + 30 - 5;
+  const dinoBottom = g.dinoY + DINO.DINO_H - 5;
+  for (const o of g.obstacles) {
+    if (o.x + o.w > 55 && o.x < dinoRight && o.y + o.h > g.dinoY + 5 && o.y < dinoBottom) {
+      g.gameOver = true;
+      break;
+    }
+  }
+  g.frame++;
+}
 
 const COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
@@ -168,6 +244,40 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('dino-join', () => {
+    if (socket.roomId) {
+      const g = ensureDinoGame(socket.roomId);
+      const o = [];
+      for (let i = 0; i < g.obstacles.length; i++) o.push({ x: g.obstacles[i].x, y: g.obstacles[i].y, w: g.obstacles[i].w, h: g.obstacles[i].h });
+      socket.emit('dino-state', [g.dinoY, g.dinoVel, o, g.score, g.gameOver ? 1 : 0]);
+    }
+  });
+
+  socket.on('key-sync', (data) => {
+    if (socket.roomId) {
+      const g = ensureDinoGame(socket.roomId);
+      const isJump = ['Space', 'ArrowUp', ' '].includes(data.key) || data.code === 'Space' || data.code === 'ArrowUp';
+      if (isJump && g.dinoY >= DINO.GROUND_Y - DINO.DINO_H - 1) {
+        g.dinoVel = DINO.JUMP;
+      }
+      if (g.gameOver && isJump) {
+        g.dinoY = DINO.GROUND_Y - DINO.DINO_H;
+        g.dinoVel = 0;
+        g.obstacles = [];
+        g.score = 0;
+        g.frame = 0;
+        g.gameOver = false;
+        g.lastObstacle = 0;
+      }
+      socket.to(socket.roomId).emit('key-sync', {
+        id: socket.id,
+        key: data.key,
+        code: data.code,
+        keyCode: data.keyCode,
+      });
+    }
+  });
+
   // WebRTC voice signaling
   socket.on('voice-offer', ({ to, offer }) => {
     io.to(to).emit('voice-offer', { from: socket.id, offer, userName: socket.userName });
@@ -186,12 +296,22 @@ io.on('connection', (socket) => {
         room.users.delete(socket.id);
         if (room.users.size === 0) {
           rooms.delete(socket.roomId);
+          dinoGames.delete(socket.roomId);
         }
       }
       socket.to(socket.roomId).emit('user-left', { id: socket.id });
     }
   });
 });
+
+setInterval(() => {
+  dinoGames.forEach((g, roomId) => {
+    tickDinoGame(roomId);
+    const o = [];
+    for (let i = 0; i < g.obstacles.length; i++) o.push({ x: g.obstacles[i].x, y: g.obstacles[i].y, w: g.obstacles[i].w, h: g.obstacles[i].h });
+    io.to(roomId).emit('dino-state', [g.dinoY, g.dinoVel, o, g.score, g.gameOver ? 1 : 0]);
+  });
+}, 1000 / TICK_RATE);
 
 app.get('/api/room', (req, res) => {
   const roomId = uuidv4().slice(0, 8);
