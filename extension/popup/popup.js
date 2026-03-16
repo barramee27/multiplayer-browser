@@ -20,11 +20,16 @@ port.onMessage.addListener((msg) => {
 });
 
 document.getElementById('btnCreate').onclick = async () => {
-  const res = await fetch(SERVER_URL + '/api/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  const { roomId: id } = await res.json();
-  document.getElementById('roomId').value = id;
-  navigator.clipboard.writeText(id);
-  alert('Room created! ID copied: ' + id);
+  try {
+    const res = await fetch(SERVER_URL + '/api/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!res.ok) throw new Error('Server error');
+    const { roomId: id } = await res.json();
+    document.getElementById('roomId').value = id;
+    navigator.clipboard.writeText(id);
+    alert('Room created! ID copied: ' + id);
+  } catch (err) {
+    alert('Cannot reach server. Start it with: cd server && npm start\n\n' + err.message);
+  }
 };
 
 document.getElementById('btnJoin').onclick = () => {
