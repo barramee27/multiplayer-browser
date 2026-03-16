@@ -1,4 +1,4 @@
-const SERVER_URL = 'http://localhost:4000';
+const SERVER_URL = 'https://multiplayer.codemesh.org';
 let roomId = null;
 let userName = null;
 
@@ -53,12 +53,22 @@ document.getElementById('btnLeave').onclick = () => {
   document.getElementById('inRoomSection').style.display = 'none';
   document.getElementById('chatSection').style.display = 'none';
   document.getElementById('voiceSection').style.display = 'none';
+  document.getElementById('injectSection').style.display = 'none';
+};
+
+document.getElementById('btnInject').onclick = () => {
+  const type = document.getElementById('injectType').value;
+  const content = document.getElementById('injectContent').value.trim();
+  if (!content) return alert('Enter some code');
+  chrome.runtime.sendMessage({ type: 'CODE_INJECT', data: { type, content } });
+  document.getElementById('injectContent').value = '';
 };
 
 function showInRoom(data) {
   document.getElementById('inRoomSection').style.display = 'block';
   document.getElementById('chatSection').style.display = 'block';
   document.getElementById('voiceSection').style.display = 'block';
+  document.getElementById('injectSection').style.display = 'block';
   const users = data.users || [];
   document.getElementById('usersList').innerHTML = users.map(u => 
     `<span class="user-chip" style="border-left:3px solid ${u.color}">${escapeHtml(u.name)}</span>`

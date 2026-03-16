@@ -124,6 +124,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Code injection - broadcast HTML/JS/CSS to all in room (sandboxed on client)
+  socket.on('code-inject', (data) => {
+    if (socket.roomId && data) {
+      const { type, content } = data;
+      const allowed = ['html', 'js', 'css'];
+      if (allowed.includes(type) && typeof content === 'string' && content.length <= 50000) {
+        io.to(socket.roomId).emit('code-inject', {
+          userId: socket.id,
+          userName: socket.userName,
+          userColor: socket.userColor,
+          type,
+          content: content.slice(0, 50000),
+        });
+      }
+    }
+  });
+
   socket.on('annotation-add', (data) => {
     if (socket.roomId) {
       socket.to(socket.roomId).emit('annotation-add', {

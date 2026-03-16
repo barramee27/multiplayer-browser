@@ -79,6 +79,17 @@
     <div class="section-title">Voice</div>
     <button class="voice-btn btn-primary" id="btnVoice">Unmute</button>
   </div>
+  <div class="section" id="injectSection" style="display:none;">
+    <div class="section-title">Inject code (to everyone in room)</div>
+    <select id="injectType">
+      <option value="html">HTML</option>
+      <option value="js">JavaScript</option>
+      <option value="css">CSS</option>
+    </select>
+    <textarea id="injectContent" placeholder="Paste HTML, JS, or CSS..." rows="4" style="width:100%;margin:8px 0;padding:8px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.1);font:12px monospace;resize:vertical;"></textarea>
+    <button class="btn-primary" id="btnInject">Inject to room</button>
+    <p style="font-size:11px;color:#5a5e72;margin-top:6px;">Runs in sandbox. Cannot access cookies or page data.</p>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

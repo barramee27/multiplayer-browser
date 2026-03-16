@@ -1,39 +1,19 @@
 /**
  * Multiplayer Browser - Content Script
- * Renders cursors, handles navigation sync, annotations
+ * Navigation sync, scroll sync, code injection (no cursor overlay)
  */
 (function () {
-  const SERVER_URL = 'http://localhost:4000';
-  let overlay = null;
-  let cursors = new Map();
   let annotations = new Map();
   let roomId = null;
   let myId = null;
-  let cursorThrottle = null;
-  let lastCursor = { x: 0, y: 0 };
 
   function getOverlay() {
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'mpb-overlay';
-      document.body.appendChild(overlay);
+    var el = document.getElementById('mpb-overlay');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'mpb-overlay';
+      document.body.appendChild(el);
     }
-    return overlay;
-  }
-
-  function createCursor(id, name, color) {
-    const el = document.createElement('div');
-    el.className = 'mpb-cursor';
-    el.dataset.id = id;
-    el.innerHTML = `
-      <svg class="mpb-cursor-svg" viewBox="0 0 24 24" fill="${color}">
-        <path d="M5.65 3.25l10.5 10.5-4.2 2.1-2.55-2.55-2.1 4.2-2.1-2.1 2.1-4.2-2.55-2.55-2.1 4.2z"/>
-      </svg>
-      <span class="mpb-cursor-label" style="background:${color}">${escapeHtml(name)}</span>
-    `;
-    el.style.left = '0px';
-    el.style.top = '0px';
-    getOverlay().appendChild(el);
     return el;
   }
 
@@ -43,27 +23,9 @@
     return div.innerHTML;
   }
 
-  function onCursorMove(data) {
-    if (data.id === myId) return;
-    let el = cursors.get(data.id);
-    if (!el) {
-      el = createCursor(data.id, data.name, data.color);
-      cursors.set(data.id, el);
-    }
-    el.style.left = data.x + 'px';
-    el.style.top = data.y + 'px';
-  }
-
-  function onUserLeft(id) {
-    const el = cursors.get(id);
-    if (el) el.remove();
-    cursors.delete(id);
-  }
+  function onUserLeft(id) {}
 
   function onNavigate(data) {
-    const url = data?.url || data;
-    if (!url || window.location.href === url) return;
-    window.location.href = url;
   }
 
   function onChatMessage(data) {
@@ -94,19 +56,59 @@
     window.scrollTo(data.scrollX || 0, data.scrollY || 0);
   }
 
-  document.addEventListener('mousemove', (e) => {
-    if (!roomId) return;
-    lastCursor = { x: e.clientX, y: e.clientY };
-    if (!cursorThrottle) {
-      cursorThrottle = setTimeout(() => {
-        chrome.runtime.sendMessage({
-          type: 'CURSOR',
-          data: { x: lastCursor.x, y: lastCursor.y }
-        }).catch(() => {});
-        cursorThrottle = null;
-      }, 50);
+  function onCodeInject(data) {
+    const { type, content, userName } = data || {};
+    if (!type || !content) return;
+    const container = document.getElementById('mpb-inject-container');
+    if (!container) {
+      const c = document.createElement('div');
+      c.id = 'mpb-inject-container';
+      c.style.cssText = 'position:fixed;top:60px;right:16px;width:400px;max-height:80vh;z-index:2147483645;background:#1a1b26;border:1px solid rgba(255,255,255,0.1);border-radius:12px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+      const header = document.createElement('div');
+      header.style.cssText = 'padding:8px 12px;background:rgba(0,0,0,0.3);font-size:12px;display:flex;justify-content:space-between;align-items:center;';
+      header.innerHTML = '<span>Injected by <span id="mpb-inject-by"></span></span><button id="mpb-inject-close" style="background:none;border:none;color:#8b8fa3;cursor:pointer;font-size:18px;">×</button>';
+      c.appendChild(header);
+      const frameWrap = document.createElement('div');
+      frameWrap.id = 'mpb-inject-frame-wrap';
+      frameWrap.style.cssText = 'height:300px;overflow:auto;';
+      c.appendChild(frameWrap);
+      header.querySelector('#mpb-inject-close').onclick = () => c.remove();
+      document.body.appendChild(c);
     }
-  }, { passive: true });
+    const byEl = document.getElementById('mpb-inject-by');
+    if (byEl) byEl.textContent = userName || 'User';
+    const frameWrap = document.getElementById('mpb-inject-frame-wrap');
+    const iframe = document.createElement('iframe');
+    iframe.sandbox = 'allow-scripts';
+    iframe.style.cssText = 'width:100%;height:280px;border:none;background:#fff;';
+    frameWrap.innerHTML = '';
+    frameWrap.appendChild(iframe);
+    var html;
+    if (type === 'html') {
+      html = content;
+    } else if (type === 'css') {
+      html = '<!DOCTYPE html><html><head><style></style></head><body></body></html>';
+    } else if (type === 'js') {
+      html = '<!DOCTYPE html><html><body></body></html>';
+    }
+    if (html) {
+      iframe.srcdoc = html;
+      iframe.onload = function() {
+        var doc = iframe.contentDocument;
+        if (!doc) return;
+        try {
+          if (type === 'css') {
+            var style = doc.querySelector('style');
+            if (style) style.textContent = content;
+          } else if (type === 'js') {
+            var script = doc.createElement('script');
+            script.textContent = content;
+            doc.body.appendChild(script);
+          }
+        } catch (e) {}
+      };
+    }
+  }
 
   window.addEventListener('scroll', () => {
     if (!roomId) return;
@@ -116,7 +118,7 @@
         type: 'SCROLL',
         data: { scrollX: window.scrollX, scrollY: window.scrollY }
       }).catch(() => {});
-    }, 200);
+    }, 100);
   }, { passive: true });
 
   const origPushState = history.pushState.bind(history);
@@ -143,13 +145,13 @@
       return;
     }
     switch (msg.type) {
-      case 'cursor-move': onCursorMove(msg.data); break;
       case 'user-left': onUserLeft(msg.data?.id); break;
       case 'navigate': onNavigate(msg.data); break;
       case 'chat-message': onChatMessage(msg.data); break;
       case 'annotation-add': onAnnotationAdd(msg.data); break;
       case 'annotation-remove': onAnnotationRemove(msg.data); break;
       case 'scroll-sync': onScrollSync(msg.data); break;
+      case 'code-inject': onCodeInject(msg.data); break;
     }
   });
 
