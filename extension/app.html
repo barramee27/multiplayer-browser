@@ -210,6 +210,17 @@
         <iframe id="injectPreviewFrame" sandbox="allow-scripts"></iframe>
       </div>
     </div>
+
+    <div class="section">
+      <div class="section-title">Built-in Proxy (Privacy)</div>
+      <label class="hint" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;">
+        <input type="checkbox" id="proxyEnabled">
+        <span>Route browser traffic through proxy</span>
+      </label>
+      <input type="text" id="proxyHost" placeholder="Proxy host (e.g. proxy.example.com or 127.0.0.1)" style="margin-bottom:6px;">
+      <input type="text" id="proxyPort" placeholder="Port (e.g. 8080)" style="margin-bottom:6px;">
+      <p class="hint">Uses Chrome proxy API. Enter your proxy server. Disable to use direct connection.</p>
+    </div>
   </div>
   <script src="app.js"></script>
 </body>

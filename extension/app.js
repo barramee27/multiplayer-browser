@@ -3,10 +3,29 @@ let roomId = null;
 let userName = null;
 
 // Restore saved state on load
-chrome.storage.local.get(['mp_userName', 'mp_roomId'], (saved) => {
+chrome.storage.local.get(['mp_userName', 'mp_roomId', 'mp_proxyEnabled', 'mp_proxyHost', 'mp_proxyPort'], (saved) => {
   if (saved.mp_userName) document.getElementById('userName').value = saved.mp_userName;
   if (saved.mp_roomId) document.getElementById('roomId').value = saved.mp_roomId;
+  const proxyEnabled = document.getElementById('proxyEnabled');
+  const proxyHost = document.getElementById('proxyHost');
+  const proxyPort = document.getElementById('proxyPort');
+  if (proxyEnabled) proxyEnabled.checked = !!saved.mp_proxyEnabled;
+  if (proxyHost) proxyHost.value = saved.mp_proxyHost || '';
+  if (proxyPort) proxyPort.value = saved.mp_proxyPort || '';
+  applyProxy();
 });
+
+function applyProxy() {
+  const enabled = document.getElementById('proxyEnabled')?.checked;
+  const host = document.getElementById('proxyHost')?.value?.trim();
+  const port = document.getElementById('proxyPort')?.value?.trim();
+  chrome.runtime.sendMessage({ type: 'SET_PROXY', enabled: !!enabled, host, port });
+  chrome.storage.local.set({ mp_proxyEnabled: !!enabled, mp_proxyHost: host || '', mp_proxyPort: port || '' });
+}
+
+document.getElementById('proxyEnabled')?.addEventListener('change', applyProxy);
+document.getElementById('proxyHost')?.addEventListener('blur', applyProxy);
+document.getElementById('proxyPort')?.addEventListener('blur', applyProxy);
 
 // Connect to background - use 'popup' so background forwards to us
 const port = chrome.runtime.connect({ name: 'popup' });

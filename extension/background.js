@@ -63,6 +63,23 @@ function connect() {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'SET_PROXY') {
+    if (msg.enabled && msg.host && msg.port) {
+      chrome.proxy.settings.set({
+        value: {
+          mode: 'fixed_servers',
+          rules: {
+            singleProxy: { scheme: 'http', host: msg.host, port: parseInt(msg.port, 10) || 8080 },
+            bypassList: ['localhost', '127.0.0.1', '<local>']
+          }
+        },
+        scope: 'regular'
+      });
+    } else {
+      chrome.proxy.settings.clear({ scope: 'regular' });
+    }
+    return false;
+  }
   if (msg.type === 'GET_STATE') {
     sendResponse({
       inRoom: !!roomId,

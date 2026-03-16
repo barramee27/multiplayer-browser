@@ -8,7 +8,8 @@
     "activeTab",
     "scripting",
     "storage",
-    "tabs"
+    "tabs",
+    "proxy"
   ],
   "host_permissions": [
     "<all_urls>",
